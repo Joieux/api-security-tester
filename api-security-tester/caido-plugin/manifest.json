@@ -1,0 +1,20 @@
+{
+  "id": "api-security-tester",
+  "name": "API Security Tester",
+  "version": "1.0.0",
+  "description": "Comprehensive API security testing plugin with token discovery and vulnerability detection",
+  "author": {
+    "name": "API Security Team",
+    "email": "security@example.com",
+    "url": "https://github.com/YOUR_USERNAME/api-security-tester"
+  },
+  "plugins": [
+    {
+      "kind": "backend",
+      "id": "api-security-backend",
+      "name": "API Security Backend",
+      "runtime": "javascript",
+      "entrypoint": "backend/script.js"
+    }
+  ]
+}
