@@ -16,7 +16,7 @@ A command-line Python tool for API security testing with token discovery and vul
 
 ### Clone the Repository
 ```bash
-git clone https://github.com/your-username/api-security-tester.git
+git clone https://github.com/Joieux/api-security-tester.git
 cd api-security-tester/standalone-tool
 ```
 
