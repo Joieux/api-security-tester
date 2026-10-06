@@ -1,2 +1,4 @@
-requests>=2.25.1
+requests>=2.28.0
 PyJWT>=2.4.0
+# Test-only:
+pytest>=7.0

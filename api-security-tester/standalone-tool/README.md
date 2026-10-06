@@ -1,108 +1,100 @@
-# API Security Tester - Standalone Tool
+# API Security Tester — Standalone Tool
 
-A command-line Python tool for API security testing with token discovery and vulnerability detection.
+A command-line defensive scanner for APIs you own or are explicitly authorized to test.
 
-## Features
+This is a rewrite focused on **safe defaults** and **honest findings**. Three principles drive the design:
 
-- **CORS Testing**: Detects wildcard CORS headers and misconfigurations
-- **Authentication Testing**: Tests endpoints with various token states
-- **Token Discovery**: Scans for exposed tokens in multiple locations
-- **Rate Limiting**: Tests for proper rate limiting implementation
-- **Vulnerability Testing**: Basic SQL injection and XSS detection
-- **OpenAPI Support**: Parse and test endpoints from OpenAPI specifications
-- **JWT Validation**: Decode and validate JWT tokens
+- **Scanning a remote URL never reads your local machine.** Local secret discovery is a separate, opt-in subcommand.
+- **Output is safe.** Everything the target sends back (bodies, headers, token material) is sanitized before printing, so a hostile server can't inject terminal escape sequences, and discovered secrets are redacted unless you ask for them.
+- **Findings are differential.** "SQL injection" means a payload changed the server's behavior versus a baseline, not that the word *error* appeared somewhere.
 
-## Installation
+## Install
 
 ```bash
 cd standalone-tool
 pip install -r requirements.txt
 ```
 
-## Requirements
-
-- Python 3.6+
-- requests
-- PyJWT
+Requires Python 3.9+, `requests`, and `PyJWT`.
 
 ## Usage
 
-### Basic Security Scan
+The tool has three subcommands: `scan`, `discover-local`, and `jwt`.
+
+### Scan a remote API
+
 ```bash
-python api_security_tester.py https://api.example.com
+python api_security_tester.py scan https://api.example.com
 ```
 
-### With Authentication Token
+With an auth token (pass the bare credential — the tool adds the scheme, and will **not** double-prefix if you include one):
+
 ```bash
-python api_security_tester.py https://api.example.com --token "Bearer abc123"
+python api_security_tester.py scan https://api.example.com --token "abc123"
+python api_security_tester.py scan https://api.example.com --token "Bearer abc123"   # also fine
 ```
 
-### Token Discovery Only
+Common options:
+
+| Option | Purpose |
+| --- | --- |
+| `--endpoints / /users /admin` | Endpoints to test (default: `/ /login /api /admin`) |
+| `--openapi URL` | Fetch an OpenAPI spec and add its paths to the scan |
+| `--auth-scheme Bearer` | Scheme to prepend to a bare token |
+| `--timeout 10` | Per-request timeout in seconds (every request is bounded) |
+| `--insecure` | Disable TLS verification (testing only) |
+| `--follow-redirects` | Follow HTTP redirects (off by default) |
+| `--proxy http://127.0.0.1:8080` | Route through a proxy |
+| `--show-secrets` | Print full credential values (redacted by default) |
+
+### What the scan checks
+
+1. **CORS** — wildcard `*`, reflected arbitrary origin (High when combined with `Allow-Credentials`), and `null` origin.
+2. **Security headers** — missing `X-Content-Type-Options`, `Content-Security-Policy`, `X-Frame-Options`, and (for HTTPS targets) `Strict-Transport-Security`.
+3. **Authentication** — compares each endpoint's response with and without a token to spot endpoints reachable unauthenticated.
+4. **Rate limiting** — a short burst; absence of a `429` is reported as *inconclusive*, not as a confirmed gap.
+5. **SQL injection** — differential: only flags a payload that introduces a database error signature the baseline didn't have, or turns a non-5xx into a 5xx.
+6. **Reflected XSS** — only flags reflected input when the response content type is HTML.
+7. **Token leakage** — scans responses for credential-like strings (JWT, API keys, AWS/GitHub/Slack tokens).
+
+### Discover secrets on the local machine (opt-in)
+
+This is deliberately **separate** from `scan`, so pointing the tool at a remote URL never crawls your own disk.
+
 ```bash
-python api_security_tester.py https://api.example.com --token-discovery
+# Scan the current directory only; secrets are redacted:
+python api_security_tester.py discover-local --paths .
+
+# Also include environment variables and common home-dir config files:
+python api_security_tester.py discover-local --paths ./src --include-env --include-home-configs
 ```
 
-### Custom Endpoints
+Add `--show-secrets` only if you genuinely need the raw values printed.
+
+### Inspect a JWT
+
 ```bash
-python api_security_tester.py https://api.example.com --endpoints /users /admin /health
+python api_security_tester.py jwt "eyJhbGciOi..."
 ```
 
-### With OpenAPI Specification
+Decodes (without verifying the signature), lists the claim keys (not their values, to avoid printing PII), and flags `alg=none` and expiry.
+
+## Output markers
+
+- `[+]` informational / good practice
+- `[.]` low-severity finding
+- `[!]` medium-severity finding
+- `[!!]` high-severity finding
+
+## Tests
+
 ```bash
-python api_security_tester.py https://api.example.com --openapi https://api.example.com/swagger.json
+pip install pytest
+python -m pytest
 ```
 
-## Command Line Options
+The suite runs against a local mock server (no external calls) and includes a named regression test for every bug this rewrite fixes.
 
-- `url`: Target API base URL (required)
-- `--token, -t`: Authentication token to test with
-- `--openapi, -o`: OpenAPI specification URL
-- `--token-discovery, -d`: Run token discovery only
-- `--endpoints, -e`: Custom endpoints to test
+## Ethical use
 
-## Token Discovery
-
-The tool can discover tokens in various locations:
-
-- API responses and headers
-- Environment variables
-- Configuration files (.env, config.json, etc.)
-- Local files (JavaScript, JSON, YAML, etc.)
-- Common config locations (~/.aws/credentials, ~/.ssh/config, etc.)
-
-### Supported Token Types
-
-- JWT tokens
-- API keys
-- Bearer tokens
-- GitHub tokens
-- Slack tokens
-- AWS access keys
-- Generic secrets
-
-## Security Tests
-
-1. **CORS Check**: Identifies wildcard CORS headers
-2. **Authentication Testing**: Tests endpoints with different token states
-3. **Token Variants**: Tests expired, tampered, and valid tokens
-4. **Rate Limiting**: Attempts to trigger rate limits
-5. **Common Vulnerabilities**: Basic SQL injection and XSS testing
-6. **Token Discovery**: Scans for exposed tokens
-
-## Output
-
-The tool provides detailed output for each test:
-
-- `[+]` Indicates a positive finding or good security practice
-- `[!]` Indicates a potential security issue
-- `[x]` Indicates an error or failed test
-
-## Ethical Use
-
-This tool is designed for defensive security purposes only. Use it to:
-
-- Test your own APIs
-- Conduct authorized security assessments
-- Identify potential security issues in development
-
-**Do not use this tool against systems you do not own or do not have explicit permission to test.**
+For defensive security only. Test your own APIs, or systems you have explicit written authorization to assess. **Do not use this against systems you do not own or lack permission to test.**
